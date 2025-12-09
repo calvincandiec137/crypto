@@ -1,0 +1,23 @@
+[project]
+name = "crypto-mcp-server"
+version = "0.1.0"
+description = "MCP-style crypto market data server"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2.0",
+    "ccxt",
+    "httpx",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx[http2]",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
