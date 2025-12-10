@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .v1.market import router as market_router
+from app.api.v1.market import router as market_router
 
 api_router = APIRouter()
 api_router.include_router(market_router, prefix="/api/v1", tags=["market"])

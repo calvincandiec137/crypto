@@ -5,9 +5,9 @@ from typing import List
 class TickerResponse(BaseModel):
     symbol: str
     price: float
-    bid: float | None = None
-    ask: float | None = None
-    volume: float | None = None
+    bid: float | None
+    ask: float | None
+    volume: float | None
     timestamp: int
 
 

@@ -3,22 +3,20 @@ from typing import Any
 
 
 class TTLCache:
-    def __init__(self) -> None:
+    def __init__(self):
         self._store: dict[str, tuple[float, Any]] = {}
 
-    def set(self, key: str, value: Any, ttl_seconds: int) -> None:
-        self._store[key] = (time.time() + ttl_seconds, value)
+    def set(self, key: str, value: Any, ttl: int):
+        self._store[key] = (time.time() + ttl, value)
 
-    def get(self, key: str) -> Any | None:
-        item = self._store.get(key)
-        if not item:
+    def get(self, key: str):
+        entry = self._store.get(key)
+        if not entry:
             return None
-
-        exp, value = item
-        if exp < time.time():
+        expires, value = entry
+        if expires < time.time():
             self._store.pop(key, None)
             return None
-
         return value
 
 
@@ -29,5 +27,5 @@ def ticker_cache_key(exchange: str, symbol: str) -> str:
     return f"ticker:{exchange}:{symbol}"
 
 
-def ohlcv_cache_key(exchange: str, symbol: str, timeframe: str, limit: int) -> str:
-    return f"ohlcv:{exchange}:{symbol}:{timeframe}:{limit}"
+def ohlcv_cache_key(exchange: str, symbol: str, tf: str, limit: int) -> str:
+    return f"ohlcv:{exchange}:{symbol}:{tf}:{limit}"

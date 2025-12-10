@@ -1,22 +1,21 @@
-from fastapi import Request
-from fastapi.responses import JSONResponse
-from fastapi import status
+from fastapi import Request, status
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 
 class ExternalAPIError(Exception):
-    def __init__(self, message: str, details: dict | None = None) -> None:
+    def __init__(self, message: str, details: dict | None = None):
         self.message = message
         self.details = details or {}
 
 
 class InvalidSymbolError(Exception):
-    def __init__(self, symbol: str) -> None:
+    def __init__(self, symbol: str):
         self.symbol = symbol
 
 
 class RateLimitError(Exception):
-    def __init__(self, message: str = "Rate limit exceeded") -> None:
+    def __init__(self, message: str = "Rate limit exceeded"):
         self.message = message
 
 
@@ -27,8 +26,8 @@ class ErrorResponse(BaseModel):
 
 
 async def external_api_error_handler(
-    request: Request, exc: ExternalAPIError
-) -> JSONResponse:
+    _: Request, exc: ExternalAPIError
+) -> Response:
     return JSONResponse(
         status_code=status.HTTP_502_BAD_GATEWAY,
         content=ErrorResponse(
@@ -40,8 +39,8 @@ async def external_api_error_handler(
 
 
 async def invalid_symbol_error_handler(
-    request: Request, exc: InvalidSymbolError
-) -> JSONResponse:
+    _: Request, exc: InvalidSymbolError
+) -> Response:
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=ErrorResponse(
@@ -53,13 +52,12 @@ async def invalid_symbol_error_handler(
 
 
 async def rate_limit_error_handler(
-    request: Request, exc: RateLimitError
-) -> JSONResponse:
+    _: Request, exc: RateLimitError
+) -> Response:
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content=ErrorResponse(
             code="RATE_LIMIT",
             message=exc.message,
-            details=None,
         ).model_dump(),
     )
