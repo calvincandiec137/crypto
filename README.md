@@ -1,14 +1,12 @@
-
 # Crypto MCP Server
 
-A high-performance, async market-data server delivering **real-time** and **historical** cryptocurrency data through REST and WebSocket APIs.  
-Built with **FastAPI**, **CCXT**, **Redis**, and a background polling engine.
+A high-performance, async market-data server delivering real-time and historical cryptocurrency data through REST and WebSocket APIs.
 
-Designed with LLM-friendly, deterministic schemas and clean service architecture.
+Built with FastAPI, CCXT, Redis, and a background polling engine.
 
----
+**Context:** This server exposes a deterministic REST API designed to be easily consumed by LLM Agents (via Model Context Protocol tools) or standard frontend clients.
 
-# Features
+## Features
 
 ### Market Data
 - Real-time ticker (REST)
@@ -28,81 +26,70 @@ Designed with LLM-friendly, deterministic schemas and clean service architecture
 - Deterministic error model
 - Async test suite (pytest + httpx)
 - Clean separation of API, services, and integration layers
-- MCP-style deterministic request/response formats
 
----
+## Design Decisions & Architecture
 
-# Architecture Overview
+### Why this Architecture?
 
-## High-Level Flow
+**Redis as "Hot Cache" (Decoupling):** LLM Agents often retry or spam requests. By decoupling the data fetching (Polling Service) from the data serving (API), we ensure that 1,000 API requests only result in 1 request to the Binance Exchange. This prevents rate-limit bans.
 
-```
+**WebSockets for Efficiency:** Instead of an agent polling an endpoint every second to check for price movement, the WebSocket pushes updates only when data changes. This reduces network overhead and latency.
 
-REST Request → FastAPI → ExchangeService → Cache → CCXT → Exchange
-WebSocket Client → WS Manager → PollingService → ExchangeService → Cache
+**AsyncIO + CCXT:** Crypto markets move in milliseconds. Using `ccxt.async_support` ensures non-blocking I/O, allowing the server to handle concurrent WebSocket clients while simultaneously polling the exchange without thread locking.
 
-```
-
-## Component Responsibilities
-
-| Component | Role |
-|----------|------|
-| **API Layer** | HTTP/WS endpoints, validation, schemas |
-| **ExchangeService** | Fetches, normalizes, and caches market data |
-| **PollingService** | Background tasks that fetch ticker updates |
-| **WebSocketManager** | Manages active WS clients + broadcasts updates |
-| **RedisCacheBackend** | Primary shared cache for fast responses |
-| **TTLCache** | Fallback in-memory cache for environments without Redis |
-| **CCXT (Binance)** | Actual market data retrieval |
-
----
-
-# System Architecture Diagram (ASCII)
+### System Architecture Diagram
 
 ```
-                         ┌──────────────────────────┐
-                         │        Clients           │
-                         │   REST / WebSocket       │
-                         └────────────┬─────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │        FastAPI          │
-                         │ (Routers + Lifespan)    │
-                         └────────────┬────────────┘
-                                      │
-           ┌──────────────────────────┼──────────────────────────┐
-┌──────────▼─────────┐    ┌───────────▼───────────┐    ┌─────────▼─────────┐
-│ REST API Layer     │    │ WebSocket Layer       │    │ PollingService    │
-│ /api/v1/...        │    │ /ws/ticker            │    │ (Background loop) │
-└──────────┬─────────┘    └───────────┬───────────┘    └─────────┬─────────┘
-           │                          │                          │
-           └──────────────────────────┼──────────────────────────┘
-                                      │
-                          ┌───────────▼───────────┐
-                          │    ExchangeService    │
-                          │ (Normalization+Cache) │
-                          └───────────┬───────────┘
-                                      │
+                                  ┌──────────────────────────┐
+                                  │        Clients           │
+                                  │   REST / WebSocket       │
+                                  └────────────┬─────────────┘
+                                               │
+                                  ┌────────────▼────────────┐
+                                  │        FastAPI          │
+                                  │ (Routers + Lifespan)    │
+                                  └────────────┬────────────┘
+                                               │
+                    ┌──────────────────────────┼──────────────────────────┐
+         ┌──────────▼─────────┐    ┌───────────▼───────────┐    ┌─────────▼─────────┐
+         │ REST API Layer     │    │ WebSocket Layer       │    │ PollingService    │
+         │ /api/v1/...        │    │ /ws/ticker            │    │ (Background loop) │
+         └──────────┬─────────┘    └───────────┬───────────┘    └─────────┬─────────┘
+                    │                          │                          │
+                    └──────────────────────────┼──────────────────────────┘
+                                               │
+                                   ┌───────────▼───────────┐
+                                   │    ExchangeService    │
+                                   │ (Normalization+Cache) │
+                                   └───────────┬───────────┘
+                                               │
                      ┌─────────────────────────┼───────────────────┐
                      │                         │                   │
         ┌────────────▼──────────┐   ┌──────────▼─────────┐   ┌─────▼─────────────┐
         │ RedisCacheBackend     │   │ TTLCache (fallback)│   │ CCXT (Binance)    │
         └───────────────────────┘   └────────────────────┘   └───────────────────┘
-
 ```
 
+### Component Responsibilities
 
----
+| Component | Role |
+|-----------|------|
+| API Layer | HTTP/WS endpoints, validation, schemas |
+| ExchangeService | Fetches, normalizes, and caches market data |
+| PollingService | Background tasks that fetch ticker updates |
+| WebSocketManager | Manages active WS clients + broadcasts updates |
+| RedisCacheBackend | Primary shared cache for fast responses |
+| CCXT (Binance) | Actual market data retrieval |
 
-# Endpoints
+## Endpoints
 
-## 1. Real-Time Ticker (REST)
+### 1. Real-Time Ticker (REST)
 
-```
+```http
 GET /api/v1/ticker?symbol=BTC/USDT
 ```
 
-Example:
+**Response (Deterministic):**
 
 ```json
 {
@@ -115,184 +102,89 @@ Example:
 }
 ```
 
----
+### 2. Historical OHLCV
 
-## 2. Historical OHLCV
-
-```
+```http
 GET /api/v1/ohlcv?symbol=BTC/USDT&timeframe=1m&limit=100
 ```
 
-Example:
-
-```json
-{
-  "symbol": "BTC/USDT",
-  "timeframe": "1m",
-  "candles": [
-    {
-      "timestamp": 1765338600000,
-      "open": 92516.86,
-      "high": 92516.86,
-      "low": 92440.75,
-      "close": 92440.76,
-      "volume": 1.80
-    }
-  ]
-}
-```
-
----
-
-## 3. Real-Time Ticker (WebSocket)
+### 3. Real-Time Ticker (WebSocket)
 
 ```
 ws://127.0.0.1:8000/api/v1/ws/ticker?symbol=BTC/USDT
 ```
 
-Receives updates every time the background polling detects a price change.
+## Redis Caching
 
-Example message:
+Redis stores the latest ticker and OHLCV snapshots.
 
-```json
-{"symbol": "BTC/USDT", "price": 89932.32, "timestamp": 1765426653009}
-```
+**Production Note:** In development, `keys *` is fine. In production, we use `SCAN` to avoid blocking the Redis thread.
 
----
+```bash
+# Check keys (Safe way)
+redis-cli --scan --pattern "*ticker*"
 
-# Redis Caching
-
-Redis stores:
-
-* Latest ticker snapshot
-* Latest OHLCV snapshot
-
-Benefits:
-
-* Fast REST responses
-* Reduced CCXT rate usage
-* Shared state across workers
-* Smooth WebSocket fanout
-
-Check Redis keys:
-
-```
-redis-cli keys "*ticker*"
+# Check TTL
 redis-cli ttl ticker:binance:BTC/USDT
 ```
 
----
+## Installation & Setup
 
-# Installation & Setup
+### 1. Clone repo
 
-## 1. Clone repo
-
-```
+```bash
 git clone https://github.com/calvincandiec137/crypto
 cd crypto
 ```
 
-## 2. Virtual environment
+### 2. Virtual environment
 
-```
+```bash
 python -m venv venv
 source venv/bin/activate
 ```
 
-## 3. Install dependencies
+### 3. Install dependencies
 
-```
+```bash
 pip install -r requirements.txt
 ```
 
-## 4. Start Redis
+### 4. Start Redis
 
-Docker:
-
-```
-systemctl start redis
-export REDIS_URL="redis://localhost:PORT"
+```bash
+# Docker example
+docker run --name redis -p 6379:6379 -d redis
 ```
 
-## 5. Run server
+### 5. Run server
 
-```
+```bash
 uvicorn app.main:app --reload
 ```
 
----
+## Configuration
 
-# Configuration
-
-`.env` file is optional but supported:
+Configure via `.env` file (see `.env.example`):
 
 ```env
-REDIS_URL=redis://localhost:PORT
+REDIS_URL=redis://localhost:6379
 EXCHANGE_NAME=binance
 DEFAULT_SYMBOL=BTC/USDT
 TICKER_TTL_SECONDS=5
-OHLCV_TTL_SECONDS=60
-REQUEST_TIMEOUT_SECONDS=10
+POLLING_INTERVAL_SECONDS=2.0
 ```
 
----
+## Testing
 
-# Testing
+Run the full async test suite:
 
-```
+```bash
 pytest
 ```
 
-Covers:
+## Future Improvements
 
-* Ticker endpoint
-* OHLCV endpoint
-* Error handling layer
-
-WebSocket & Redis tests can be added.
-
----
-
-# Manual Testing
-
-REST:
-
-```
-curl "http://127.0.0.1:8000/api/v1/ticker?symbol=BTC/USDT"
-```
-
-WebSocket:
-
-```
-websocat "ws://127.0.0.1:8000/api/v1/ws/ticker?symbol=BTC/USDT"
-```
-
-Redis:
-
-```
-redis-cli keys "*"
-redis-cli monitor
-```
-
----
-
-# MCP Compatibility
-
-* Stateless
-* Deterministic schemas
-* Ideal for LLM integration
-* Predictable, structured outputs
-
----
-
-# Future Improvements
-
-* Redis Pub/Sub fanout
-* Multi-exchange routing
-* WebSocket OHLCV streaming
-* Rate limiting using Redis
-* Horizontal scaling with worker coordination
-* Prometheus `/metrics` endpoint
-
----
-
+- **Redis Pub/Sub:** Currently using polling for WS updates; moving to Redis Pub/Sub would allow horizontal scaling of WebSocket servers.
+- **Metrics:** Add Prometheus `/metrics` to track exchange latency and cache hit rates.
+- **Rate Limiting:** Implement token bucket limits on the API side using Redis.
