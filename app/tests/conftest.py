@@ -21,7 +21,6 @@ async def async_client():
 
 @pytest.fixture(autouse=True)
 async def clear_redis():
-    # If Redis is used, flush before each test
     try:
         cache = exchange_service.cache
         if isinstance(cache, RedisCacheBackend):

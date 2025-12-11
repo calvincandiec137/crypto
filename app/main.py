@@ -20,12 +20,10 @@ configure_logging()
 app = FastAPI(title="Crypto MCP Server")
 app.include_router(api_router)
 
-# register exception handlers
 app.add_exception_handler(ExternalAPIError, external_api_error_handler)
 app.add_exception_handler(InvalidSymbolError, invalid_symbol_error_handler)
 app.add_exception_handler(RateLimitError, rate_limit_error_handler)
 
-# create polling service instance here (uses module-level exchange_service & ws_manager)
 polling_service = PollingService(exchange_service, ws_manager, poll_interval=2.0)
 
 @app.on_event("startup")
@@ -40,7 +38,6 @@ async def shutdown():
 async def ws_ticker(websocket: WebSocket, symbol: str):
     await ws_manager.connect(symbol, websocket)
 
-    # send one immediate ticker so TestClient receives something
     ticker = await exchange_service.fetch_ticker(symbol)
     await websocket.send_json(ticker.model_dump())
 

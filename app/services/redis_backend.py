@@ -15,7 +15,6 @@ class RedisCacheBackend:
         return json.loads(raw)
 
     async def set(self, key: str, value, ttl: int):
-        # Expect value to be serializable or a pydantic model dict
         if hasattr(value, "model_dump"):
             payload = value.model_dump()
         else:

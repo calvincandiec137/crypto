@@ -11,7 +11,6 @@ from app.services.redis_backend import RedisCacheBackend
 
 logger = get_logger(__name__)
 
-# select cache backend (module-level so tests can import exchange_service)
 _cache_backend = None
 if settings.REDIS_URL:
     try:
@@ -92,5 +91,4 @@ class ExchangeService:
         await self.cache.set(key, resp.model_dump(), settings.OHLCV_TTL_SECONDS)
         return resp
 
-# module-level instance exported for routes/tests
 exchange_service = ExchangeService(_cache_backend)
