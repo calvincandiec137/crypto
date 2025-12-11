@@ -7,6 +7,7 @@ Built with FastAPI, CCXT, Redis, and a background polling engine.
 **Context:** This server exposes a deterministic REST API designed to be easily consumed by LLM Agents (via Model Context Protocol tools) or standard frontend clients.
 
 
+https://github.com/user-attachments/assets/b4ef26b0-1a32-4d54-875b-8d7902bcceac
 
 
 ## Features
