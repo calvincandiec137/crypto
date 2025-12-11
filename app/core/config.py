@@ -1,19 +1,20 @@
-import os
-from pydantic import BaseModel
-from dotenv import load_dotenv
-
-load_dotenv()
+from pydantic_settings import BaseSettings
 
 
-class Settings(BaseModel):
-    exchange_name: str = os.getenv("EXCHANGE_NAME", "binance")
-    default_symbol: str = os.getenv("DEFAULT_SYMBOL", "BTC/USDT")
+class Settings(BaseSettings):
+    EXCHANGE_NAME: str = "binance"
+    DEFAULT_SYMBOL: str = "BTC/USDT"
 
-    ticker_ttl_seconds: int = int(os.getenv("TICKER_TTL_SECONDS", "5"))
-    ohlcv_ttl_seconds: int = int(os.getenv("OHLCV_TTL_SECONDS", "60"))
+    TICKER_TTL_SECONDS: int = 5
+    OHLCV_TTL_SECONDS: int = 60
+    REQUEST_TIMEOUT_SECONDS: int = 10
 
-    request_timeout_seconds: int = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
-    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    REDIS_URL: str | None = None
+    LOG_LEVEL: str = "INFO"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 
 settings = Settings()

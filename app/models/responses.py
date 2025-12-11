@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import List
 
-
 class TickerResponse(BaseModel):
     symbol: str
     price: float
@@ -10,7 +9,6 @@ class TickerResponse(BaseModel):
     volume: float | None
     timestamp: int
 
-
 class OHLCVCandle(BaseModel):
     timestamp: int
     open: float
@@ -18,7 +16,6 @@ class OHLCVCandle(BaseModel):
     low: float
     close: float
     volume: float
-
 
 class OHLCVResponse(BaseModel):
     symbol: str

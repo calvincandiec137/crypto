@@ -1,28 +1,13 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from fastapi import APIRouter
-
-from app.main import app
 from app.core.exceptions import ExternalAPIError
-
-router = APIRouter()
-
-
-@router.get("/test/error")
-async def error_route():
-    raise ExternalAPIError("Boom", {"detail": "test"})
-
-
-app.include_router(router)
-
+from app.services.exchange import exchange_service
 
 @pytest.mark.asyncio
-async def test_external_error_handler():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/test/error")
-
+async def test_external_error_handler(async_client, monkeypatch):
+    async def fake_fetch_ticker(symbol: str):
+        raise ExternalAPIError("TEST")
+    monkeypatch.setattr(exchange_service, "fetch_ticker", fake_fetch_ticker)
+    resp = await async_client.get("/api/v1/ticker?symbol=BTC/USDT")
     assert resp.status_code == 502
     data = resp.json()
     assert data["code"] == "EXTERNAL_API_ERROR"
-    assert data["message"] == "Boom"

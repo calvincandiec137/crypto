@@ -1,13 +1,11 @@
 import logging
 from app.core.config import settings
 
-
-def configure_logging() -> None:
+def configure_logging():
     logging.basicConfig(
-        level=settings.log_level,
+        level=settings.LOG_LEVEL,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
 
-
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str):
     return logging.getLogger(name)

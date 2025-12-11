@@ -1,110 +1,129 @@
 
 # Crypto MCP Server
 
-An async, Python-based MCP-style server that provides real-time and historical
-cryptocurrency market data using live exchange APIs via CCXT.
+A high-performance, async market-data server delivering **real-time** and **historical** cryptocurrency data through REST and WebSocket APIs.  
+Built with **FastAPI**, **CCXT**, **Redis**, and a background polling engine.
 
-The service exposes clean, deterministic HTTP endpoints suitable for LLM tools,
-automation, and programmatic consumption.
-
----
-
-## Overview
-
-This project implements a lightweight market data server that fetches:
-
-- **Real-time ticker prices**
-- **Historical OHLCV (candlestick) data**
-
-from major cryptocurrency exchanges (currently **Binance Spot**) using the
-CCXT library.
-
-The server is built with **FastAPI**, follows clean service separation, includes
-error handling, caching, and is fully covered by async tests.
+Designed with LLM-friendly, deterministic schemas and clean service architecture.
 
 ---
 
-## Key Features
+# Features
 
-- Async FastAPI server
-- CCXT-based exchange abstraction
-- Real-time ticker endpoint
-- Historical OHLCV endpoint
-- In-memory TTL caching
-- Unified error handling
-- Deterministic JSON responses
-- OpenAPI / Swagger documentation
-- Fully tested using pytest + httpx
-- MCP-friendly API design
+### Market Data
+- Real-time ticker (REST)
+- Real-time ticker (WebSocket streaming)
+- Historical OHLCV (candlesticks)
+- Exchange data normalized into stable JSON responses
+
+### Infrastructure
+- Redis caching backend (primary)
+- In-memory TTL cache (fallback)
+- Background polling service for continuous price updates
+- Multi-client WebSocket broadcasting
+- CCXT async integration (Binance Spot)
+
+### Engineering
+- Modular service architecture
+- Deterministic error model
+- Async test suite (pytest + httpx)
+- Clean separation of API, services, and integration layers
+- MCP-style deterministic request/response formats
 
 ---
 
-## Architecture (High Level)
+# Architecture Overview
+
+## High-Level Flow
 
 ```
 
-Client
-↓
-FastAPI Router (/api/v1)
-↓
-Exchange Service Layer
-↓
-CCXT (Binance)
+REST Request → FastAPI → ExchangeService → Cache → CCXT → Exchange
+WebSocket Client → WS Manager → PollingService → ExchangeService → Cache
 
 ```
 
-### Core Layers
+## Component Responsibilities
 
-- **API Layer**  
-  Handles request validation, response schemas, and routing.
-
-- **Service Layer**  
-  Contains exchange logic, caching, and exception mapping.
-
-- **Integration Layer**  
-  Uses CCXT to fetch data from Binance in async mode.
-
-- **Cache Layer**  
-  In-memory TTL cache to avoid excessive API calls.
+| Component | Role |
+|----------|------|
+| **API Layer** | HTTP/WS endpoints, validation, schemas |
+| **ExchangeService** | Fetches, normalizes, and caches market data |
+| **PollingService** | Background tasks that fetch ticker updates |
+| **WebSocketManager** | Manages active WS clients + broadcasts updates |
+| **RedisCacheBackend** | Primary shared cache for fast responses |
+| **TTLCache** | Fallback in-memory cache for environments without Redis |
+| **CCXT (Binance)** | Actual market data retrieval |
 
 ---
 
-## Endpoints
+# System Architecture Diagram (ASCII)
 
-### 1. Get Ticker (Real-Time Price)
+```
+                         ┌──────────────────────────┐
+                         │        Clients           │
+                         │   REST / WebSocket       │
+                         └────────────┬─────────────┘
+                                      │
+                         ┌────────────▼────────────┐
+                         │        FastAPI          │
+                         │ (Routers + Lifespan)    │
+                         └────────────┬────────────┘
+                                      │
+           ┌──────────────────────────┼──────────────────────────┐
+┌──────────▼─────────┐    ┌───────────▼───────────┐    ┌─────────▼─────────┐
+│ REST API Layer     │    │ WebSocket Layer       │    │ PollingService    │
+│ /api/v1/...        │    │ /ws/ticker            │    │ (Background loop) │
+└──────────┬─────────┘    └───────────┬───────────┘    └─────────┬─────────┘
+           │                          │                          │
+           └──────────────────────────┼──────────────────────────┘
+                                      │
+                          ┌───────────▼───────────┐
+                          │    ExchangeService    │
+                          │ (Normalization+Cache) │
+                          └───────────┬───────────┘
+                                      │
+                     ┌─────────────────────────┼───────────────────┐
+                     │                         │                   │
+        ┌────────────▼──────────┐   ┌──────────▼─────────┐   ┌─────▼─────────────┐
+        │ RedisCacheBackend     │   │ TTLCache (fallback)│   │ CCXT (Binance)    │
+        └───────────────────────┘   └────────────────────┘   └───────────────────┘
 
 ```
 
-GET /api/v1/ticker
+
+---
+
+# Endpoints
+
+## 1. Real-Time Ticker (REST)
+
+```
 GET /api/v1/ticker?symbol=BTC/USDT
+```
 
-````
+Example:
 
-**Response**
 ```json
 {
   "symbol": "BTC/USDT",
-  "price": 92455.91,
-  "bid": 92455.9,
-  "ask": 92455.91,
-  "volume": 20914.49,
-  "timestamp": 1765338685013
+  "price": 90012.42,
+  "bid": 90012.41,
+  "ask": 90012.42,
+  "volume": 21000.12,
+  "timestamp": 1765338616002
 }
-````
-
-* Uses CCXT `fetch_ticker`
-* `price` corresponds to **last traded price**
-* Cached for a short TTL
+```
 
 ---
 
-### 2. Get OHLCV (Historical Candles)
+## 2. Historical OHLCV
 
 ```
-GET /api/v1/ohlcv?symbol=BTC/USDT&timeframe=1m&limit=5
+GET /api/v1/ohlcv?symbol=BTC/USDT&timeframe=1m&limit=100
 ```
 
-**Response**
+Example:
 
 ```json
 {
@@ -117,199 +136,163 @@ GET /api/v1/ohlcv?symbol=BTC/USDT&timeframe=1m&limit=5
       "high": 92516.86,
       "low": 92440.75,
       "close": 92440.76,
-      "volume": 1.80049
+      "volume": 1.80
     }
   ]
 }
 ```
 
-* Uses CCXT `fetch_ohlcv`
-* Fully validated query parameters
-* Returns structured candle objects
-* Cached using exchange + symbol + timeframe + limit
-
 ---
 
-## Error Handling
+## 3. Real-Time Ticker (WebSocket)
 
-All errors are normalized into deterministic JSON responses.
+```
+ws://127.0.0.1:8000/api/v1/ws/ticker?symbol=BTC/USDT
+```
 
-### Invalid Symbol
+Receives updates every time the background polling detects a price change.
+
+Example message:
 
 ```json
-{
-  "code": "INVALID_SYMBOL",
-  "message": "Invalid symbol: FAKE/PAIR",
-  "details": {
-    "symbol": "FAKE/PAIR"
-  }
-}
-```
-
-### Rate Limit
-
-```json
-{
-  "code": "RATE_LIMIT",
-  "message": "Rate limit exceeded"
-}
-```
-
-### External API Failure
-
-```json
-{
-  "code": "EXTERNAL_API_ERROR",
-  "message": "Ticker fetch failed"
-}
-```
-
-Invalid query values (e.g. `limit > 1000`) return FastAPI’s built-in **422 validation errors**.
-
----
-
-## Supported Symbols
-
-Any **Binance Spot** pair supported by CCXT can be queried.
-
-Examples:
-
-```
-BTC/USDT
-ETH/USDT
-SOL/USDT
-BNB/USDT
-XRP/USDT
-ADA/USDT
+{"symbol": "BTC/USDT", "price": 89932.32, "timestamp": 1765426653009}
 ```
 
 ---
 
-## Setup Instructions
+# Redis Caching
 
-### 1. Clone the repository
+Redis stores:
 
-```bash
-git clone <your-repo-url>
+* Latest ticker snapshot
+* Latest OHLCV snapshot
+
+Benefits:
+
+* Fast REST responses
+* Reduced CCXT rate usage
+* Shared state across workers
+* Smooth WebSocket fanout
+
+Check Redis keys:
+
+```
+redis-cli keys "*ticker*"
+redis-cli ttl ticker:binance:BTC/USDT
+```
+
+---
+
+# Installation & Setup
+
+## 1. Clone repo
+
+```
+git clone https://github.com/calvincandiec137/crypto
 cd crypto
 ```
 
-### 2. Create virtual environment
+## 2. Virtual environment
 
-```bash
+```
 python -m venv venv
 source venv/bin/activate
 ```
 
-### 3. Install dependencies
+## 3. Install dependencies
 
-```bash
+```
 pip install -r requirements.txt
 ```
 
-### 4. Run the server
+## 4. Start Redis
 
-```bash
-uvicorn app.main:app
-```
-
-Server will start at:
+Docker:
 
 ```
-http://127.0.0.1:8000
+systemctl start redis
+export REDIS_URL="redis://localhost:PORT"
 ```
 
-Swagger UI:
+## 5. Run server
 
 ```
-http://127.0.0.1:8000/docs
+uvicorn app.main:app --reload
 ```
 
 ---
 
-## Environment Configuration (Optional)
+# Configuration
 
-Create a `.env` file if customization is needed.
+`.env` file is optional but supported:
 
 ```env
+REDIS_URL=redis://localhost:PORT
 EXCHANGE_NAME=binance
 DEFAULT_SYMBOL=BTC/USDT
 TICKER_TTL_SECONDS=5
 OHLCV_TTL_SECONDS=60
 REQUEST_TIMEOUT_SECONDS=10
-LOG_LEVEL=INFO
 ```
-
-Defaults are provided if `.env` is absent.
 
 ---
 
-## Testing
+# Testing
 
-### Run all tests
-
-```bash
+```
 pytest
 ```
 
-Test coverage includes:
+Covers:
 
-* Successful ticker fetch
-* Successful OHLCV fetch
-* Invalid symbol handling
-* Unified error response behavior
+* Ticker endpoint
+* OHLCV endpoint
+* Error handling layer
 
-Async tests use **httpx ASGITransport** and fully mock the exchange service where required.
-
----
-
-## Manual Validation
-
-The implementation was manually validated by:
-
-* Calling endpoints via `curl`
-* Comparing prices against:
-
-  * Binance web UI
-  * Binance REST API
-  * CCXT direct calls
-* Verifying cache behavior via logs
-* Confirming correct HTTP status codes for error scenarios
+WebSocket & Redis tests can be added.
 
 ---
 
-## MCP Alignment
+# Manual Testing
 
-This server follows MCP-style principles:
+REST:
 
-* Stateless HTTP endpoints
-* Deterministic JSON responses
-* Strict input/output schemas
-* Tool-call friendly APIs
-* No session or user state
-* Suitable for LLM integration and automation
+```
+curl "http://127.0.0.1:8000/api/v1/ticker?symbol=BTC/USDT"
+```
 
----
+WebSocket:
 
-## Known Limitations
+```
+websocat "ws://127.0.0.1:8000/api/v1/ws/ticker?symbol=BTC/USDT"
+```
 
-* Single exchange (Binance)
-* In-memory cache only
-* No WebSocket streaming
-* No persistent storage
+Redis:
 
-These were deliberate scope decisions given time constraints.
-
----
-
-## Future Improvements
-
-* Redis-based cache
-* Multi-exchange support
-* WebSocket price streaming
-* Authentication and rate limiting
-* Deployment configuration
+```
+redis-cli keys "*"
+redis-cli monitor
+```
 
 ---
 
+# MCP Compatibility
+
+* Stateless
+* Deterministic schemas
+* Ideal for LLM integration
+* Predictable, structured outputs
+
+---
+
+# Future Improvements
+
+* Redis Pub/Sub fanout
+* Multi-exchange routing
+* WebSocket OHLCV streaming
+* Rate limiting using Redis
+* Horizontal scaling with worker coordination
+* Prometheus `/metrics` endpoint
+
+---
 
